@@ -177,5 +177,11 @@
     "startTime": "Start Time",
     "timestamps": "Timestamps",
     "title": "Trim Video"
+  },
+  "linkDownloader": {
+    "title": "Link downloader",
+    "description": "",
+    "shortDescription": "",
+    "longDescription": ""
   }
 }

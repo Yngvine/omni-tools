@@ -1,12 +1,13 @@
 import { readFile, writeFile } from 'fs/promises';
 import fs from 'fs';
-import { dirname, join, sep } from 'path';
+import { dirname, join, relative, sep } from 'path';
 import { fileURLToPath } from 'url';
 
 const currentDirname = dirname(fileURLToPath(import.meta.url));
 
 const toolName = process.argv[2];
 const folder = process.argv[3];
+const categoryFolders = (folder ?? '').split(/[\\/]+/).filter(Boolean);
 
 const toolsDir = join(
   currentDirname,
@@ -14,7 +15,7 @@ const toolsDir = join(
   'src',
   'pages',
   'tools',
-  folder ?? ''
+  ...categoryFolders
 );
 if (!toolName) {
   throw new Error('Please specify a toolname.');
@@ -25,44 +26,34 @@ function capitalizeFirstLetter(string) {
 }
 
 function createFolderStructure(basePath, foldersToCreateIndexCount) {
-  const folderArray = basePath.split(sep);
+  fs.mkdirSync(basePath, { recursive: true });
+  const folderArray = relative(toolsDir, dirname(basePath))
+    .split(sep)
+    .filter(Boolean);
+  const firstFolderToIndex = Math.max(
+    0,
+    folderArray.length - foldersToCreateIndexCount
+  );
 
-  function recursiveCreate(currentBase, index) {
-    if (index >= folderArray.length) {
-      return;
-    }
-    const currentPath = join(currentBase, folderArray[index]);
-    if (!fs.existsSync(currentPath)) {
-      fs.mkdirSync(currentPath, { recursive: true });
-    }
+  for (let index = firstFolderToIndex; index < folderArray.length; index += 1) {
+    const currentPath = join(toolsDir, ...folderArray.slice(0, index + 1));
     const indexPath = join(currentPath, 'index.ts');
-    if (
-      !fs.existsSync(indexPath) &&
-      index < folderArray.length - 1 &&
-      index >= folderArray.length - 1 - foldersToCreateIndexCount
-    ) {
+    if (!fs.existsSync(indexPath)) {
       fs.writeFileSync(
         indexPath,
-        `export const ${
-          currentPath.split(sep)[currentPath.split(sep).length - 1]
-        }Tools = [];\n`
+        `export const ${folderArray[index]}Tools = [];\n`
       );
       console.log(`File created: ${indexPath}`);
     }
-    // Recursively create the next folder
-    recursiveCreate(currentPath, index + 1);
   }
-
-  // Start the recursive folder creation
-  recursiveCreate('.', 0);
 }
 
 const toolNameCamelCase = toolName.replace(/-./g, (x) => x[1].toUpperCase());
 const toolNameTitleCase =
   toolName[0].toUpperCase() + toolName.slice(1).replace(/-/g, ' ');
 const toolDir = join(toolsDir, toolName);
-const type = folder.split(sep)[folder.split(sep).length - 1];
-await createFolderStructure(toolDir, folder.split(sep).length);
+const type = categoryFolders[categoryFolders.length - 1] ?? '';
+await createFolderStructure(toolDir, categoryFolders.length);
 console.log(`Directory created: ${toolDir}`);
 
 const createToolFile = async (name, content) => {

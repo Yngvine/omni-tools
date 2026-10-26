@@ -1,3 +1,4 @@
+import { tool as videoLinkDownloader } from './link-downloader/meta';
 import { tool as videoMergeVideo } from './merge-video/meta';
 import { tool as changeSpeed } from './change-speed/meta';
 import { tool as flipVideo } from './flip/meta';

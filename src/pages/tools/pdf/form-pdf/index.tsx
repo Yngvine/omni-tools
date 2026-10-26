@@ -4,11 +4,11 @@ import { Document, Page, pdfjs } from 'react-pdf';
 import { Rnd } from 'react-rnd';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import { useTranslation } from 'react-i18next';
-import 'react-pdf/dist/esm/Page/TextLayer.css';
-import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
+import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import 'react-pdf/dist/Page/TextLayer.css';
+import 'react-pdf/dist/Page/AnnotationLayer.css';
 
-pdfjs.GlobalWorkerOptions.workerSrc =
-  '//cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+pdfjs.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
 interface Field {
   id: string;
