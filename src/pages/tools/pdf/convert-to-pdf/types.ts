@@ -18,5 +18,6 @@ export interface LoadedImage {
   image: HTMLImageElement;
   objectUrl: string;
   format: 'PNG' | 'JPEG';
+  normalizeForPdf: boolean;
   filename: string;
 }

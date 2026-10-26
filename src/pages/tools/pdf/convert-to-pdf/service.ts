@@ -3,6 +3,9 @@ import { ImageSize, InitialValuesType, LoadedImage } from './types';
 import { heicTo, isHeic } from 'heic-to';
 
 const pxToMm = (px: number) => px * 0.264583;
+const jpegSofMarkers = new Set([
+  0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf
+]);
 
 function returnImageFormat(file: File): 'PNG' | 'JPEG' {
   const type = file.type.toLowerCase();
@@ -27,6 +30,37 @@ function returnImageFormat(file: File): 'PNG' | 'JPEG' {
   return 'JPEG';
 }
 
+async function jpegNeedsNormalization(file: File): Promise<boolean> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  if (bytes[0] !== 0xff || bytes[1] !== 0xd8) return true;
+
+  let offset = 2;
+  while (offset < bytes.length) {
+    if (bytes[offset] !== 0xff) return true;
+    while (offset < bytes.length && bytes[offset] === 0xff) offset += 1;
+
+    const marker = bytes[offset];
+    offset += 1;
+    if (marker === 0xda || marker === 0xd9) return false;
+    if (
+      marker === 0xd8 ||
+      marker === 0x01 ||
+      (marker >= 0xd0 && marker <= 0xd7)
+    ) {
+      continue;
+    }
+    if (offset + 1 >= bytes.length) return true;
+
+    const segmentLength = (bytes[offset] << 8) | bytes[offset + 1];
+    if (marker === 0xc4) return true;
+    if (jpegSofMarkers.has(marker)) return false;
+    if (segmentLength < 2) return true;
+    offset += segmentLength;
+  }
+
+  return true;
+}
+
 async function loadImage(file: File): Promise<LoadedImage> {
   let processedFile = file;
 
@@ -45,12 +79,29 @@ async function loadImage(file: File): Promise<LoadedImage> {
   const objectUrl = URL.createObjectURL(processedFile);
   image.src = objectUrl;
   await image.decode();
+  const format = returnImageFormat(file);
   return {
     image,
     objectUrl,
-    format: returnImageFormat(file),
+    format,
+    normalizeForPdf:
+      format === 'JPEG' && (await jpegNeedsNormalization(processedFile)),
     filename: processedFile.name
   };
+}
+
+function normalizeJpeg(image: HTMLImageElement): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+
+  const context = canvas.getContext('2d');
+  if (!context) {
+    throw new Error('Could not prepare image for PDF conversion');
+  }
+
+  context.drawImage(image, 0, 0);
+  return canvas;
 }
 
 export async function buildPdf(
@@ -82,8 +133,8 @@ export async function buildPdf(
   }
 
   const { image: firstImage, filename: firstImageFileName } = loadedImages[0];
-  const firstImageWidthMm = pxToMm(firstImage.width);
-  const firstImageHeightMm = pxToMm(firstImage.height);
+  const firstImageWidthMm = pxToMm(firstImage.naturalWidth);
+  const firstImageHeightMm = pxToMm(firstImage.naturalHeight);
 
   try {
     const pdf =
@@ -103,9 +154,9 @@ export async function buildPdf(
     pdf.setDisplayMode('fullwidth');
 
     for (let index = 0; index < loadedImages.length; index += 1) {
-      const { image, format } = loadedImages[index];
-      const imageWidthMm = pxToMm(image.width);
-      const imageHeightMm = pxToMm(image.height);
+      const { image, format, normalizeForPdf } = loadedImages[index];
+      const imageWidthMm = pxToMm(image.naturalWidth);
+      const imageHeightMm = pxToMm(image.naturalHeight);
 
       if (index > 0) {
         if (pageType === 'full') {
@@ -121,29 +172,30 @@ export async function buildPdf(
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
 
-      const widthRatio = pageWidth / image.width;
-      const heightRatio = pageHeight / image.height;
+      const widthRatio = pageWidth / image.naturalWidth;
+      const heightRatio = pageHeight / image.naturalHeight;
       const fitScale = Math.min(widthRatio, heightRatio);
+      const pdfImage = normalizeForPdf ? normalizeJpeg(image) : image;
 
       const finalWidth =
         pageType === 'full'
           ? pageWidth
-          : image.width * fitScale * (scale / 100);
+          : image.naturalWidth * fitScale * (scale / 100);
 
       const finalHeight =
         pageType === 'full'
           ? pageHeight
-          : image.height * fitScale * (scale / 100);
+          : image.naturalHeight * fitScale * (scale / 100);
 
       const x = pageType === 'full' ? 0 : (pageWidth - finalWidth) / 2;
       const y = pageType === 'full' ? 0 : (pageHeight - finalHeight) / 2;
 
-      pdf.addImage(image, format, x, y, finalWidth, finalHeight);
+      pdf.addImage(pdfImage, format, x, y, finalWidth, finalHeight);
       imageSizes.push({
         widthMm: imageWidthMm,
         heightMm: imageHeightMm,
-        widthPx: image.width,
-        heightPx: image.height
+        widthPx: image.naturalWidth,
+        heightPx: image.naturalHeight
       });
     }
 
