@@ -13,6 +13,7 @@ import { tool as resizeVideo } from './resize/meta';
 
 export const videoTools = [
   ...gifTools,
+  videoLinkDownloader,
   trimVideo,
   rotateVideo,
   compressVideo,
