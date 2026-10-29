@@ -180,8 +180,106 @@
   },
   "linkDownloader": {
     "title": "Link downloader",
-    "description": "",
-    "shortDescription": "",
-    "longDescription": ""
+    "description": "Download videos or audio from a URL and manage active and completed jobs.",
+    "shortDescription": "Download video and audio links",
+    "longDescription": "Queue video or audio downloads, follow progress, retry failures, and download completed files.",
+    "url": "Video or audio URL",
+    "urlPlaceholder": "Paste a video or audio link",
+    "downloadType": "Download type",
+    "codec": "Codec",
+    "format": "Format",
+    "quality": "Quality",
+    "addDownload": "Add download",
+    "adding": "Adding to queue...",
+    "downloads": "Downloads",
+    "downloadsDescription": "Queue status and completed files",
+    "download": "Download",
+    "retry": "Retry",
+    "progressLabel": "Download progress for {{title}}",
+    "cancel": "Cancel download",
+    "cancelItem": "Cancel {{title}}",
+    "refresh": "Refresh download list",
+    "inProgress": "In progress",
+    "eta": {
+      "left": "left"
+    },
+    "connection": {
+      "live": "Live",
+      "connecting": "Connecting",
+      "offline": "Offline",
+      "connectingMessage": "Connecting to live updates...",
+      "unavailableMessage": "Live updates are unavailable. Use refresh to load the latest queue snapshot."
+    },
+    "tabs": {
+      "label": "Download job status",
+      "queue": "Queue ({{count}})",
+      "currentSession": "This session ({{count}})",
+      "failed": "Failed ({{count}})",
+      "history": "History ({{count}})"
+    },
+    "empty": {
+      "queue": "No downloads in the queue.",
+      "completed": "No downloads completed in this session yet.",
+      "failed": "No failed downloads.",
+      "history": "No previous downloads."
+    },
+    "status": {
+      "queued": "Queued",
+      "pending": "Waiting",
+      "scheduled": "Scheduled",
+      "preparing": "Preparing",
+      "downloading": "Downloading",
+      "postprocessing": "Finishing",
+      "finished": "Completed",
+      "error": "Failed"
+    },
+    "feedback": {
+      "added": "Added to the download queue.",
+      "canceled": "Download canceled.",
+      "retryQueued": "Download queued for retry."
+    },
+    "errors": {
+      "optionsUnavailable": "Could not load MeTube download options.",
+      "addFailed": "Could not queue this URL.",
+      "retryFailed": "Retry failed.",
+      "cancelFailed": "Could not cancel download.",
+      "backendUnavailable": "Could not reach the MeTube backend.",
+      "unexpectedResponse": "MeTube returned an unexpected response. Check that the backend is available.",
+      "requestFailed": "MeTube request failed ({{status}}).",
+      "invalidQueue": "Could not read the MeTube queue.",
+      "unreadableJob": "MeTube sent an unreadable job update.",
+      "unreadableProgress": "MeTube sent an unreadable progress update.",
+      "unreadableCompletion": "MeTube sent an unreadable completion update.",
+      "historyUnavailable": "Could not refresh downloads."
+    },
+    "choices": {
+      "video": "Video",
+      "audio": "Audio",
+      "auto": "Auto",
+      "h264": "H.264",
+      "h265": "H.265 (HEVC)",
+      "av1": "AV1",
+      "vp9": "VP9",
+      "any": "Auto",
+      "mp4": "MP4",
+      "ios": "iOS Compatible",
+      "m4a": "M4A",
+      "mp3": "MP3",
+      "opus": "OPUS",
+      "wav": "WAV",
+      "flac": "FLAC",
+      "best": "Best",
+      "worst": "Worst",
+      "2160": "2160p",
+      "1440": "1440p",
+      "1080": "1080p",
+      "720": "720p",
+      "480": "480p",
+      "360": "360p",
+      "240": "240p",
+      "320": "320 kbps",
+      "192": "192 kbps",
+      "128": "128 kbps"
+    }
   }
 }

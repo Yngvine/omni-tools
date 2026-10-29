@@ -7,7 +7,7 @@
 
 - **Tool search:** The autocomplete is on the home page (`Hero`), not in the persistent app shell. Its options filter as the user types, but the quick links are static examples or bookmarks. There is no recent/frequent-use ranking, and the search component unmounts on tool navigation.
 - **Multi-image ordering:** Image uploads display thumbnails and support removal/clear, but have no reorder control. The PDF converter consumes the input array order. Audio/PDF inputs have reorder helper functions, but they are not currently wired to visible drag interactions.
-- **Video URL downloader:** The original one-shot form has been replaced by an in-page queue manager using MeTube's `/formats`, `/history`, `/add`, `/retry`, and `/delete` routes plus its Socket.IO queue events. The view shows live progress, completed files, failures, retries, and cancellation without exposing a directory listing. Focused tests, lint, production build, and desktop/mobile browser checks pass.
+- **Video URL downloader:** The original one-shot form has been replaced by an in-page queue manager using MeTube's `/formats`, `/history`, `/add`, `/retry`, and `/delete` routes plus its Socket.IO queue events. The view shows live progress, this-session completions, persisted download history, failures, retries, and cancellation without exposing a directory listing. The downloader is localized in English, Spanish, and Ukrainian.
 - **Shared tool experience:** Tools use common input/result components, but interaction states and affordances vary. The video downloader is currently an especially isolated custom form, while generic file results provide a preview and download action.
 
 ## Proposed Priorities
@@ -32,7 +32,7 @@ Replace the one-shot “queued” alert and direct directory link with an in-pag
 
 The confirmed `ghcr.io/alexta69/metube:latest` contract provides a dynamic `/formats` catalog, `/history`, `/add`, `/retry`, and `/delete` routes, plus Socket.IO `all`, `added`, `updated`, `completed`, `canceled`, and `cleared` events. The UI connects through the existing Nginx proxy at `/api/metube/socket.io`; no adapter or fork is needed for this pass. Completed files remain on the MeTube volume and are linked from the dedicated completed list through `/download/` or `/audio_download/`.
 
-**Acceptance checks:** A submitted URL appears once in the queue; status updates without a manual page refresh; completed output downloads from the app; failed jobs can be retried and queue jobs canceled; unavailable states are understandable; the UI works on mobile and does not depend on directory-listing HTML.
+**Acceptance checks:** A submitted URL appears once in the queue; status updates without a manual page refresh; completed output downloads from the app; prior successful downloads remain accessible in History after reopening; this-session completions are distinct from History; failed jobs can be retried and queue jobs canceled; unavailable states are understandable; the UI works on mobile and does not depend on directory-listing HTML.
 
 ### P2: Consistent Tool Controls and Feedback
 

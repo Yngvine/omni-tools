@@ -8,6 +8,21 @@ import {
 
 const apiBasePath = '/api/metube';
 
+export type MeTubeServiceErrorCode =
+  | 'backendUnavailable'
+  | 'unexpectedResponse'
+  | 'requestFailed';
+
+export class MeTubeServiceError extends Error {
+  constructor(
+    readonly code: MeTubeServiceErrorCode,
+    readonly status?: number
+  ) {
+    super(code);
+    this.name = 'MeTubeServiceError';
+  }
+}
+
 export function createMeTubeSocket(): Socket {
   return io({ path: `${apiBasePath}/socket.io` });
 }
@@ -41,6 +56,26 @@ export function parseMeTubeHistory(payload: unknown): MeTubeHistory {
   };
 }
 
+export function partitionCompletedDownloads(
+  downloads: MeTubeDownload[],
+  currentSessionKeys: Set<string>
+): { currentSession: MeTubeDownload[]; history: MeTubeDownload[] } {
+  return downloads.reduce(
+    (partition, download) => {
+      if (download.status === 'error') return partition;
+
+      const key = download.url || download.id || '';
+      if (key && currentSessionKeys.has(key)) {
+        partition.currentSession.push(download);
+      } else {
+        partition.history.push(download);
+      }
+      return partition;
+    },
+    { currentSession: [] as MeTubeDownload[], history: [] as MeTubeDownload[] }
+  );
+}
+
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
@@ -52,20 +87,19 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
       }
     });
   } catch {
-    throw new Error('Could not reach the MeTube backend.');
+    throw new MeTubeServiceError('backendUnavailable');
   }
 
   let body: T & { status?: string; msg?: string };
   try {
     body = (await response.json()) as T & { status?: string; msg?: string };
   } catch {
-    throw new Error(
-      'MeTube returned an unexpected response. Check that the backend is available.'
-    );
+    throw new MeTubeServiceError('unexpectedResponse');
   }
 
   if (!response.ok || body?.status === 'error') {
-    throw new Error(body?.msg || `MeTube request failed (${response.status}).`);
+    if (body?.msg) throw new Error(body.msg);
+    throw new MeTubeServiceError('requestFailed', response.status);
   }
 
   return body;
@@ -139,6 +173,6 @@ export function formatEta(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return '';
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = Math.floor(seconds % 60);
-  if (minutes > 0) return `${minutes}m ${remainingSeconds}s left`;
-  return `${remainingSeconds}s left`;
+  if (minutes > 0) return `${minutes}m ${remainingSeconds}s`;
+  return `${remainingSeconds}s`;
 }

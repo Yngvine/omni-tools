@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Box,
@@ -19,6 +19,8 @@ import DownloadIcon from '@mui/icons-material/Download';
 import CloseIcon from '@mui/icons-material/Close';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import ReplayIcon from '@mui/icons-material/Replay';
+import { useTranslation } from 'react-i18next';
+import { TFunction } from 'i18next';
 import ToolContent from '@components/ToolContent';
 import { ToolComponentProps } from '@tools/defineTool';
 import {
@@ -31,6 +33,8 @@ import {
   formatBytes,
   formatEta,
   formatSpeed,
+  MeTubeServiceError,
+  partitionCompletedDownloads,
   parseMeTubeHistory,
   retryDownload
 } from './service';
@@ -41,19 +45,14 @@ import {
   MeTubeDownloadType
 } from './types';
 
-type JobTab = 'queue' | 'finished' | 'failed';
+type JobTab = 'queue' | 'finished' | 'failed' | 'history';
 type ConnectionState = 'connecting' | 'connected' | 'disconnected' | 'error';
-
-const jobStatusLabels: Record<string, string> = {
-  queued: 'Queued',
-  pending: 'Waiting',
-  scheduled: 'Scheduled',
-  preparing: 'Preparing',
-  downloading: 'Downloading',
-  postprocessing: 'Finishing',
-  finished: 'Completed',
-  error: 'Failed'
-};
+type DownloaderErrorKey =
+  | 'linkDownloader.errors.optionsUnavailable'
+  | 'linkDownloader.errors.addFailed'
+  | 'linkDownloader.errors.retryFailed'
+  | 'linkDownloader.errors.cancelFailed'
+  | 'linkDownloader.errors.historyUnavailable';
 
 const jobStatusColors: Record<
   string,
@@ -70,6 +69,25 @@ const jobStatusColors: Record<
 };
 
 const activeStatuses = new Set(['preparing', 'downloading', 'postprocessing']);
+
+function getErrorMessage(
+  error: unknown,
+  t: TFunction<'video'>,
+  fallbackKey: DownloaderErrorKey
+): string {
+  if (error instanceof MeTubeServiceError) {
+    if (error.code === 'backendUnavailable') {
+      return t('linkDownloader.errors.backendUnavailable');
+    }
+    if (error.code === 'unexpectedResponse') {
+      return t('linkDownloader.errors.unexpectedResponse');
+    }
+    return t('linkDownloader.errors.requestFailed', {
+      status: String(error.status ?? '')
+    });
+  }
+  return error instanceof Error ? error.message : t(fallbackKey);
+}
 
 function parseEventValue<T>(value: unknown): T {
   return (typeof value === 'string' ? JSON.parse(value) : value) as T;
@@ -114,12 +132,14 @@ function JobRow({
   canceling?: boolean;
   retrying?: boolean;
 }) {
+  const { t } = useTranslation('video');
   const isActive = activeStatuses.has(download.status);
   const percent = Math.max(0, Math.min(100, download.percent ?? 0));
   const fileHref = downloadHref(download);
+  const eta = formatEta(download.eta ?? Number.NaN);
   const metrics = [
     formatSpeed(download.speed ?? 0),
-    formatEta(download.eta ?? Number.NaN),
+    eta ? `${eta} ${t('linkDownloader.eta.left')}` : '',
     formatBytes(download.size ?? 0)
   ].filter(Boolean);
 
@@ -147,7 +167,9 @@ function JobRow({
               size="small"
               variant="outlined"
               color={jobStatusColors[download.status] ?? 'default'}
-              label={jobStatusLabels[download.status] ?? download.status}
+              label={t(`linkDownloader.status.${download.status}`, {
+                defaultValue: download.status
+              })}
             />
             {fileHref && (
               <Button
@@ -158,7 +180,7 @@ function JobRow({
                 variant="outlined"
                 startIcon={<DownloadIcon />}
               >
-                Download
+                {t('linkDownloader.download')}
               </Button>
             )}
             {onRetry && (
@@ -168,14 +190,16 @@ function JobRow({
                 disabled={!download.url || retrying}
                 startIcon={<ReplayIcon />}
               >
-                Retry
+                {t('linkDownloader.retry')}
               </Button>
             )}
             {onCancel && (
-              <Tooltip title="Cancel download">
+              <Tooltip title={t('linkDownloader.cancel')}>
                 <span>
                   <IconButton
-                    aria-label={`Cancel ${download.title || 'download'}`}
+                    aria-label={t('linkDownloader.cancelItem', {
+                      title: download.title || t('linkDownloader.download')
+                    })}
                     onClick={() => onCancel(download)}
                     disabled={!download.url || canceling}
                     size="small"
@@ -196,12 +220,14 @@ function JobRow({
                 download.percent == null ? 'indeterminate' : 'determinate'
               }
               value={percent}
-              aria-label={`Download progress for ${download.title || 'item'}`}
+              aria-label={t('linkDownloader.progressLabel', {
+                title: download.title || t('linkDownloader.download')
+              })}
             />
             <Stack direction="row" justifyContent="space-between" mt={0.5}>
               <Typography variant="caption" color="text.secondary">
                 {download.percent == null
-                  ? 'In progress'
+                  ? t('linkDownloader.inProgress')
                   : `${Math.round(percent)}%`}
               </Typography>
               {metrics.length > 0 && (
@@ -224,6 +250,7 @@ function JobRow({
 }
 
 export default function LinkDownloader({ title }: ToolComponentProps) {
+  const { t } = useTranslation('video');
   const [url, setUrl] = useState('');
   const [downloadType, setDownloadType] = useState<'video' | 'audio'>('video');
   const [format, setFormat] = useState('any');
@@ -235,6 +262,7 @@ export default function LinkDownloader({ title }: ToolComponentProps) {
     queue: [] as MeTubeDownload[],
     done: [] as MeTubeDownload[]
   });
+  const sessionCompletedKeys = useRef(new Set<string>());
   const [connection, setConnection] = useState<ConnectionState>('connecting');
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{
@@ -276,10 +304,8 @@ export default function LinkDownloader({ title }: ToolComponentProps) {
     socket.on('all', (payload: unknown) => {
       try {
         replaceJobs(parseMeTubeHistory(payload));
-      } catch (error) {
-        setHistoryError(
-          error instanceof Error ? error.message : 'Could not read the queue.'
-        );
+      } catch {
+        setHistoryError(t('linkDownloader.errors.invalidQueue'));
       }
     });
     socket.on('added', (payload: unknown) => {
@@ -290,7 +316,7 @@ export default function LinkDownloader({ title }: ToolComponentProps) {
           queue: upsertDownload(current.queue, download)
         }));
       } catch {
-        setHistoryError('MeTube sent an unreadable job update.');
+        setHistoryError(t('linkDownloader.errors.unreadableJob'));
       }
     });
     socket.on('updated', (payload: unknown) => {
@@ -301,19 +327,22 @@ export default function LinkDownloader({ title }: ToolComponentProps) {
           queue: upsertDownload(current.queue, download)
         }));
       } catch {
-        setHistoryError('MeTube sent an unreadable progress update.');
+        setHistoryError(t('linkDownloader.errors.unreadableProgress'));
       }
     });
     socket.on('completed', (payload: unknown) => {
       try {
         const download = parseEventValue<MeTubeDownload>(payload);
         const key = itemKey(download);
+        if (download.status === 'finished' && key) {
+          sessionCompletedKeys.current.add(key);
+        }
         setJobs((current) => ({
           queue: withoutDownload(current.queue, key),
           done: upsertDownload(current.done, download)
         }));
       } catch {
-        setHistoryError('MeTube sent an unreadable completion update.');
+        setHistoryError(t('linkDownloader.errors.unreadableCompletion'));
       }
     });
     socket.on('canceled', (payload: unknown) => {
@@ -325,6 +354,7 @@ export default function LinkDownloader({ title }: ToolComponentProps) {
     });
     socket.on('cleared', (payload: unknown) => {
       const key = parseEventValue<string>(payload);
+      sessionCompletedKeys.current.delete(key);
       setJobs((current) => ({
         ...current,
         done: withoutDownload(current.done, key)
@@ -341,9 +371,11 @@ export default function LinkDownloader({ title }: ToolComponentProps) {
       .catch((error: unknown) => {
         if (active) {
           setCatalogError(
-            error instanceof Error
-              ? error.message
-              : 'Could not load MeTube download options.'
+            getErrorMessage(
+              error,
+              t,
+              'linkDownloader.errors.optionsUnavailable'
+            )
           );
         }
       });
@@ -352,13 +384,15 @@ export default function LinkDownloader({ title }: ToolComponentProps) {
       active = false;
       socket.disconnect();
     };
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (!catalog) return;
+    const typeOptions = catalog.download_type.options.filter(
+      (item) => item.id === 'video' || item.id === 'audio'
+    );
     const type =
-      downloadTypes.find((item) => item.id === downloadType) ??
-      downloadTypes[0];
+      typeOptions.find((item) => item.id === downloadType) ?? typeOptions[0];
     if (!type) return;
 
     const defaultFormat = type.format.options.find(
@@ -368,7 +402,7 @@ export default function LinkDownloader({ title }: ToolComponentProps) {
     setCodec(type.codec?.default ?? 'auto');
     setFormat(type.format.default);
     setQuality(defaultFormat?.quality?.default ?? 'best');
-  }, [catalog]);
+  }, [catalog, downloadType]);
 
   const handleDownload = async () => {
     if (!url.trim() || !selectedType || !selectedFormat) return;
@@ -385,15 +419,14 @@ export default function LinkDownloader({ title }: ToolComponentProps) {
       });
       setFeedback({
         type: 'success',
-        message: result.msg || 'Added to the download queue.'
+        message: result.msg || t('linkDownloader.feedback.added')
       });
       setUrl('');
       setTab('queue');
     } catch (error) {
       setFeedback({
         type: 'error',
-        message:
-          error instanceof Error ? error.message : 'Could not queue this URL.'
+        message: getErrorMessage(error, t, 'linkDownloader.errors.addFailed')
       });
     } finally {
       setSubmitting(false);
@@ -411,7 +444,7 @@ export default function LinkDownloader({ title }: ToolComponentProps) {
       setHistoryError(null);
     } catch (error) {
       setHistoryError(
-        error instanceof Error ? error.message : 'Could not refresh downloads.'
+        getErrorMessage(error, t, 'linkDownloader.errors.historyUnavailable')
       );
     } finally {
       setRefreshing(false);
@@ -426,13 +459,13 @@ export default function LinkDownloader({ title }: ToolComponentProps) {
       const result = await retryDownload(download.url);
       setFeedback({
         type: 'success',
-        message: result.msg || 'Download queued for retry.'
+        message: result.msg || t('linkDownloader.feedback.retryQueued')
       });
       setTab('queue');
     } catch (error) {
       setFeedback({
         type: 'error',
-        message: error instanceof Error ? error.message : 'Retry failed.'
+        message: getErrorMessage(error, t, 'linkDownloader.errors.retryFailed')
       });
     } finally {
       setRetryingId(null);
@@ -447,13 +480,12 @@ export default function LinkDownloader({ title }: ToolComponentProps) {
       const result = await cancelDownload(download.url);
       setFeedback({
         type: 'success',
-        message: result.msg || 'Download canceled.'
+        message: result.msg || t('linkDownloader.feedback.canceled')
       });
     } catch (error) {
       setFeedback({
         type: 'error',
-        message:
-          error instanceof Error ? error.message : 'Could not cancel download.'
+        message: getErrorMessage(error, t, 'linkDownloader.errors.cancelFailed')
       });
     } finally {
       setCancelingUrl(null);
@@ -475,14 +507,17 @@ export default function LinkDownloader({ title }: ToolComponentProps) {
     setQuality(nextFormat.quality?.default ?? 'best');
   };
 
-  const finishedJobs = jobs.done.filter((item) => item.status !== 'error');
+  const { currentSession: finishedJobs, history: historicalJobs } =
+    partitionCompletedDownloads(jobs.done, sessionCompletedKeys.current);
   const failedJobs = jobs.done.filter((item) => item.status === 'error');
   const visibleJobs =
     tab === 'queue'
       ? jobs.queue
       : tab === 'finished'
         ? finishedJobs
-        : failedJobs;
+        : tab === 'failed'
+          ? failedJobs
+          : historicalJobs;
 
   return (
     <ToolContent
@@ -501,8 +536,8 @@ export default function LinkDownloader({ title }: ToolComponentProps) {
           }}
         >
           <TextField
-            label="Video or audio URL"
-            placeholder="https://…"
+            label={t('linkDownloader.url')}
+            placeholder={t('linkDownloader.urlPlaceholder')}
             type="url"
             required
             fullWidth
@@ -514,7 +549,7 @@ export default function LinkDownloader({ title }: ToolComponentProps) {
             <Stack spacing={2}>
               <TextField
                 select
-                label="Download type"
+                label={t('linkDownloader.downloadType')}
                 value={downloadType}
                 onChange={(event) => {
                   const nextType = downloadTypes.find(
@@ -525,27 +560,31 @@ export default function LinkDownloader({ title }: ToolComponentProps) {
               >
                 {downloadTypes.map((item) => (
                   <MenuItem key={item.id} value={item.id}>
-                    {item.text}
+                    {t(`linkDownloader.choices.${item.id}`, {
+                      defaultValue: item.text
+                    })}
                   </MenuItem>
                 ))}
               </TextField>
               {selectedType.codec && selectedType.codec.options.length > 1 && (
                 <TextField
                   select
-                  label="Codec"
+                  label={t('linkDownloader.codec')}
                   value={codec}
                   onChange={(event) => setCodec(event.target.value)}
                 >
                   {selectedType.codec.options.map((item) => (
                     <MenuItem key={item.id} value={item.id}>
-                      {item.text}
+                      {t(`linkDownloader.choices.${item.id}`, {
+                        defaultValue: item.text
+                      })}
                     </MenuItem>
                   ))}
                 </TextField>
               )}
               <TextField
                 select
-                label="Format"
+                label={t('linkDownloader.format')}
                 value={format}
                 onChange={(event) => {
                   const nextFormat = formatOptions.find(
@@ -556,20 +595,24 @@ export default function LinkDownloader({ title }: ToolComponentProps) {
               >
                 {formatOptions.map((item) => (
                   <MenuItem key={item.id} value={item.id}>
-                    {item.text}
+                    {t(`linkDownloader.choices.${item.id}`, {
+                      defaultValue: item.text
+                    })}
                   </MenuItem>
                 ))}
               </TextField>
               {qualityOptions.length > 1 && (
                 <TextField
                   select
-                  label="Quality"
+                  label={t('linkDownloader.quality')}
                   value={quality}
                   onChange={(event) => setQuality(event.target.value)}
                 >
                   {qualityOptions.map((item) => (
                     <MenuItem key={item.id} value={item.id}>
-                      {item.text}
+                      {t(`linkDownloader.choices.${item.id}`, {
+                        defaultValue: item.text
+                      })}
                     </MenuItem>
                   ))}
                 </TextField>
@@ -583,7 +626,9 @@ export default function LinkDownloader({ title }: ToolComponentProps) {
               submitting || !url.trim() || !selectedType || !selectedFormat
             }
           >
-            {submitting ? 'Adding to queue…' : 'Add download'}
+            {submitting
+              ? t('linkDownloader.adding')
+              : t('linkDownloader.addDownload')}
           </Button>
           {feedback && (
             <Alert severity={feedback.type}>{feedback.message}</Alert>
@@ -599,9 +644,11 @@ export default function LinkDownloader({ title }: ToolComponentProps) {
             spacing={1}
           >
             <Box>
-              <Typography variant="h6">Downloads</Typography>
+              <Typography variant="h6">
+                {t('linkDownloader.downloads')}
+              </Typography>
               <Typography variant="body2" color="text.secondary">
-                Queue status and completed files
+                {t('linkDownloader.downloadsDescription')}
               </Typography>
             </Box>
             <Stack direction="row" spacing={1} alignItems="center">
@@ -610,16 +657,16 @@ export default function LinkDownloader({ title }: ToolComponentProps) {
                 color={connection === 'connected' ? 'success' : 'default'}
                 label={
                   connection === 'connected'
-                    ? 'Live'
+                    ? t('linkDownloader.connection.live')
                     : connection === 'connecting'
-                      ? 'Connecting'
-                      : 'Offline'
+                      ? t('linkDownloader.connection.connecting')
+                      : t('linkDownloader.connection.offline')
                 }
               />
-              <Tooltip title="Refresh download list">
+              <Tooltip title={t('linkDownloader.refresh')}>
                 <span>
                   <IconButton
-                    aria-label="Refresh download list"
+                    aria-label={t('linkDownloader.refresh')}
                     onClick={() => void refreshHistory()}
                     disabled={refreshing}
                     size="small"
@@ -633,9 +680,9 @@ export default function LinkDownloader({ title }: ToolComponentProps) {
 
           {connection !== 'connected' && (
             <Alert severity={connection === 'error' ? 'warning' : 'info'}>
-              Live updates are{' '}
-              {connection === 'connecting' ? 'connecting' : 'unavailable'}. Use
-              refresh to load the latest queue snapshot.
+              {connection === 'connecting'
+                ? t('linkDownloader.connection.connectingMessage')
+                : t('linkDownloader.connection.unavailableMessage')}
             </Alert>
           )}
           {historyError && <Alert severity="warning">{historyError}</Alert>}
@@ -643,15 +690,35 @@ export default function LinkDownloader({ title }: ToolComponentProps) {
           <Tabs
             value={tab}
             onChange={(_, value: JobTab) => setTab(value)}
-            variant="fullWidth"
-            aria-label="Download job status"
+            variant="scrollable"
+            scrollButtons="auto"
+            allowScrollButtonsMobile
+            aria-label={t('linkDownloader.tabs.label')}
           >
-            <Tab value="queue" label={`Queue (${jobs.queue.length})`} />
+            <Tab
+              value="queue"
+              label={t('linkDownloader.tabs.queue', {
+                count: jobs.queue.length
+              })}
+            />
             <Tab
               value="finished"
-              label={`Completed (${finishedJobs.length})`}
+              label={t('linkDownloader.tabs.currentSession', {
+                count: finishedJobs.length
+              })}
             />
-            <Tab value="failed" label={`Failed (${failedJobs.length})`} />
+            <Tab
+              value="failed"
+              label={t('linkDownloader.tabs.failed', {
+                count: failedJobs.length
+              })}
+            />
+            <Tab
+              value="history"
+              label={t('linkDownloader.tabs.history', {
+                count: historicalJobs.length
+              })}
+            />
           </Tabs>
 
           {visibleJobs.length > 0 ? (
@@ -674,10 +741,12 @@ export default function LinkDownloader({ title }: ToolComponentProps) {
             >
               <Typography color="text.secondary">
                 {tab === 'queue'
-                  ? 'No downloads in the queue.'
+                  ? t('linkDownloader.empty.queue')
                   : tab === 'finished'
-                    ? 'No completed downloads yet.'
-                    : 'No failed downloads.'}
+                    ? t('linkDownloader.empty.completed')
+                    : tab === 'failed'
+                      ? t('linkDownloader.empty.failed')
+                      : t('linkDownloader.empty.history')}
               </Typography>
             </Paper>
           )}

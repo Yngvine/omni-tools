@@ -6,6 +6,7 @@ import {
   formatBytes,
   formatEta,
   formatSpeed,
+  partitionCompletedDownloads,
   parseMeTubeHistory
 } from './service';
 import { MeTubeDownload } from './types';
@@ -45,6 +46,31 @@ describe('link-downloader service', () => {
     expect(() => parseMeTubeHistory({ queue: [], done: [] })).toThrow(
       'MeTube sent an unexpected queue snapshot.'
     );
+  });
+
+  it('separates this-session completions from older successful history', () => {
+    const current: MeTubeDownload = {
+      url: 'https://example.com/current',
+      status: 'finished'
+    };
+    const previous: MeTubeDownload = {
+      url: 'https://example.com/previous',
+      status: 'finished'
+    };
+    const failed: MeTubeDownload = {
+      url: 'https://example.com/failed',
+      status: 'error'
+    };
+
+    expect(
+      partitionCompletedDownloads(
+        [current, previous, failed],
+        new Set(['https://example.com/current'])
+      )
+    ).toEqual({
+      currentSession: [current],
+      history: [previous]
+    });
   });
 
   it('builds app-proxied download links with encoded path segments', () => {
@@ -98,15 +124,16 @@ describe('link-downloader service', () => {
       })
     );
 
-    await expect(fetchFormatCatalog()).rejects.toThrow(
-      'MeTube returned an unexpected response. Check that the backend is available.'
-    );
+    await expect(fetchFormatCatalog()).rejects.toMatchObject({
+      name: 'MeTubeServiceError',
+      code: 'unexpectedResponse'
+    });
   });
 
   it('formats progress metrics', () => {
     expect(formatBytes(1024 * 1024)).toBe('1.0 MB');
     expect(formatSpeed(1024)).toBe('1.0 KB/s');
-    expect(formatEta(125)).toBe('2m 5s left');
+    expect(formatEta(125)).toBe('2m 5s');
     expect(formatEta(Number.NaN)).toBe('');
   });
 });

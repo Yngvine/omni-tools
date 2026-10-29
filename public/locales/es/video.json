@@ -105,5 +105,109 @@
     "startTime": "Hora de inicio",
     "timestamps": "Marcas de tiempo",
     "title": "Recortar vídeo"
+  },
+  "linkDownloader": {
+    "title": "Descargador de enlaces",
+    "description": "Descarga vídeos o audio desde un enlace y administra las tareas activas y completadas.",
+    "shortDescription": "Descargar vídeos y audio desde enlaces",
+    "longDescription": "Añade descargas de vídeo o audio a la cola, consulta el progreso, reintenta los errores y descarga los archivos completados.",
+    "url": "Enlace de vídeo o audio",
+    "urlPlaceholder": "Pega un enlace de vídeo o audio",
+    "downloadType": "Tipo de descarga",
+    "codec": "Códec",
+    "format": "Formato",
+    "quality": "Calidad",
+    "addDownload": "Añadir descarga",
+    "adding": "Añadiendo a la cola...",
+    "downloads": "Descargas",
+    "downloadsDescription": "Estado de la cola y archivos completados",
+    "download": "Descargar",
+    "retry": "Reintentar",
+    "progressLabel": "Progreso de descarga de {{title}}",
+    "cancel": "Cancelar descarga",
+    "cancelItem": "Cancelar {{title}}",
+    "refresh": "Actualizar lista de descargas",
+    "inProgress": "En curso",
+    "eta": {
+      "left": "restantes"
+    },
+    "connection": {
+      "live": "En tiempo real",
+      "connecting": "Conectando",
+      "offline": "Sin conexión",
+      "connectingMessage": "Conectando a las actualizaciones en tiempo real...",
+      "unavailableMessage": "Las actualizaciones en tiempo real no están disponibles. Actualiza para cargar el estado más reciente de la cola."
+    },
+    "tabs": {
+      "label": "Estado de las descargas",
+      "queue": "Cola ({{count}})",
+      "currentSession": "Esta sesión ({{count}})",
+      "failed": "Fallidas ({{count}})",
+      "history": "Historial ({{count}})"
+    },
+    "empty": {
+      "queue": "No hay descargas en la cola.",
+      "completed": "Aún no se han completado descargas en esta sesión.",
+      "failed": "No hay descargas fallidas.",
+      "history": "No hay descargas anteriores."
+    },
+    "status": {
+      "queued": "En cola",
+      "pending": "En espera",
+      "scheduled": "Programada",
+      "preparing": "Preparando",
+      "downloading": "Descargando",
+      "postprocessing": "Finalizando",
+      "finished": "Completada",
+      "error": "Fallida"
+    },
+    "feedback": {
+      "added": "Añadida a la cola de descargas.",
+      "canceled": "Descarga cancelada.",
+      "retryQueued": "Descarga añadida a la cola para reintentar."
+    },
+    "errors": {
+      "optionsUnavailable": "No se pudieron cargar las opciones de descarga de MeTube.",
+      "addFailed": "No se pudo añadir este enlace a la cola.",
+      "retryFailed": "No se pudo reintentar la descarga.",
+      "cancelFailed": "No se pudo cancelar la descarga.",
+      "backendUnavailable": "No se pudo conectar con el servidor de MeTube.",
+      "unexpectedResponse": "MeTube devolvió una respuesta inesperada. Comprueba que el servidor esté disponible.",
+      "requestFailed": "La solicitud a MeTube falló ({{status}}).",
+      "invalidQueue": "No se pudo leer la cola de MeTube.",
+      "unreadableJob": "MeTube envió una actualización de tarea que no se pudo leer.",
+      "unreadableProgress": "MeTube envió una actualización de progreso que no se pudo leer.",
+      "unreadableCompletion": "MeTube envió una actualización de finalización que no se pudo leer.",
+      "historyUnavailable": "No se pudieron actualizar las descargas."
+    },
+    "choices": {
+      "video": "Vídeo",
+      "audio": "Audio",
+      "auto": "Automático",
+      "h264": "H.264",
+      "h265": "H.265 (HEVC)",
+      "av1": "AV1",
+      "vp9": "VP9",
+      "any": "Automático",
+      "mp4": "MP4",
+      "ios": "Compatible con iOS",
+      "m4a": "M4A",
+      "mp3": "MP3",
+      "opus": "OPUS",
+      "wav": "WAV",
+      "flac": "FLAC",
+      "best": "Mejor",
+      "worst": "Peor",
+      "2160": "2160p",
+      "1440": "1440p",
+      "1080": "1080p",
+      "720": "720p",
+      "480": "480p",
+      "360": "360p",
+      "240": "240p",
+      "320": "320 kbps",
+      "192": "192 kbps",
+      "128": "128 kbps"
+    }
   }
 }
